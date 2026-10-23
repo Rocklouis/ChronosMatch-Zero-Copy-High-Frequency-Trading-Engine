@@ -27,8 +27,10 @@ cdef class CythonMatchingCore:
                 elif candidate[1] == current[1]:
                     if candidate[3] < current[3]:
                         best = i
-                    elif (candidate[3] == current[3]
-                          and candidate[0] < current[0]):
+                    elif (
+                        candidate[3] == current[3]
+                        and candidate[0] < current[0]
+                    ):
                         best = i
             else:
                 if candidate[1] < current[1]:
@@ -36,8 +38,10 @@ cdef class CythonMatchingCore:
                 elif candidate[1] == current[1]:
                     if candidate[3] < current[3]:
                         best = i
-                    elif (candidate[3] == current[3]
-                          and candidate[0] < current[0]):
+                    elif (
+                        candidate[3] == current[3]
+                        and candidate[0] < current[0]
+                    ):
                         best = i
 
         return best
@@ -57,6 +61,7 @@ cdef class CythonMatchingCore:
         cdef long long trade_price
         cdef object resting
 
+        # Validate incoming order.
         if order_id < 0:
             raise ValueError("Invalid order ID")
         if side not in (0, 1):
@@ -72,11 +77,11 @@ cdef class CythonMatchingCore:
         if side == 0:
             book = self.asks
 
+            # Match incoming buy against the lowest eligible asks.
             while quantity > 0 and book:
                 best = self._best_index(book, False)
                 resting = book[best]
 
-                # A buy can match only if its price reaches the ask.
                 if price < resting[1]:
                     break
 
@@ -84,8 +89,8 @@ cdef class CythonMatchingCore:
                 trade_price = resting[1]
 
                 trades.append((
-                    order_id,       # buy order ID
-                    resting[0],     # sell order ID
+                    order_id,
+                    resting[0],
                     trade_price,
                     fill_qty
                 ))
@@ -96,6 +101,7 @@ cdef class CythonMatchingCore:
                 if resting[2] == 0:
                     book.pop(best)
 
+            # Store any unfilled buy quantity.
             if quantity > 0:
                 self.bids.append(
                     [order_id, price, quantity, timestamp]
@@ -104,11 +110,11 @@ cdef class CythonMatchingCore:
         else:
             book = self.bids
 
+            # Match incoming sell against the highest eligible bids.
             while quantity > 0 and book:
                 best = self._best_index(book, True)
                 resting = book[best]
 
-                # A sell can match only if its price reaches the bid.
                 if price > resting[1]:
                     break
 
@@ -116,8 +122,8 @@ cdef class CythonMatchingCore:
                 trade_price = resting[1]
 
                 trades.append((
-                    resting[0],     # buy order ID
-                    order_id,       # sell order ID
+                    resting[0],
+                    order_id,
                     trade_price,
                     fill_qty
                 ))
@@ -128,6 +134,7 @@ cdef class CythonMatchingCore:
                 if resting[2] == 0:
                     book.pop(best)
 
+            # Store any unfilled sell quantity.
             if quantity > 0:
                 self.asks.append(
                     [order_id, price, quantity, timestamp]
@@ -153,3 +160,17 @@ cdef class CythonMatchingCore:
 
     cpdef int resting_order_count(self):
         return len(self.bids) + len(self.asks)
+
+    cpdef tuple book_snapshot(self):
+        """Return immutable snapshots of resting bids and asks."""
+        cdef list bids_snapshot = []
+        cdef list asks_snapshot = []
+        cdef object order
+
+        for order in self.bids:
+            bids_snapshot.append(tuple(order))
+
+        for order in self.asks:
+            asks_snapshot.append(tuple(order))
+
+        return tuple(bids_snapshot), tuple(asks_snapshot)
