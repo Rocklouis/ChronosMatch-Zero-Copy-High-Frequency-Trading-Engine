@@ -12,4 +12,9 @@ dist/
 *.sqlite3
 *.log
 .vscode/
-      
+      # Generated Cython C files
+cython_smoke.c
+src/chronosmatch/matching_core.c
+
+# Compiled Python extensions
+*.pyd
