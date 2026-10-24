@@ -23,7 +23,9 @@ async def main():
 
         start = asyncio.get_running_loop().time()
 
-        with MmapRingBuffer(buffer_path, capacity) as ring:
+        with MmapRingBuffer(
+    buffer_path, capacity, use_lock=False
+) as ring:
             firehose = MarketFirehose(target_rate=1_000_000)
 
             async for order in firehose.stream(total_orders):
