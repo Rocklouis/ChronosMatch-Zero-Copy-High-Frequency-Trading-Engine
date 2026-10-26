@@ -6,7 +6,7 @@
 
 from libc.stdlib cimport malloc, realloc, free
 from libc.stddef cimport size_t
-
+from time import perf_counter_ns
 
 cdef struct COrder:
     long long order_id
@@ -61,6 +61,7 @@ cdef class CythonMatchingCore:
     cdef Py_ssize_t ask_count
     cdef Py_ssize_t bid_capacity
     cdef Py_ssize_t ask_capacity
+    cdef long long _last_match_duration_ns
 
     def __cinit__(self):
         self.bids = NULL
@@ -69,6 +70,7 @@ cdef class CythonMatchingCore:
         self.ask_count = 0
         self.bid_capacity = 0
         self.ask_capacity = 0
+        self._last_match_duration_ns = 0
 
     def __dealloc__(self):
         if self.bids != NULL:
@@ -134,6 +136,8 @@ cdef class CythonMatchingCore:
         cdef CTrade* trade_data = NULL
         cdef long long fill_qty
         cdef list trades = []
+        cdef long long start_ns
+        cdef long long end_ns
 
         if order_id < 0:
             raise ValueError("Invalid order ID")
@@ -171,7 +175,11 @@ cdef class CythonMatchingCore:
             if trade_data == NULL:
                 raise MemoryError()
 
+        
         try:
+            # Start timing immediately before native matching.
+            start_ns = perf_counter_ns()
+
             # The matching loop uses only C-level values and arrays.
             with nogil:
                 while incoming.quantity > 0 and rest_count > 0:
@@ -179,7 +187,7 @@ cdef class CythonMatchingCore:
                         opposite, rest_count, side == 1
                     )
 
-                    if side == 0:
+            if side == 0:
                         if incoming.price < opposite[best].price:
                             break
                     else:
@@ -193,7 +201,43 @@ cdef class CythonMatchingCore:
                     trade_data[trade_count].price = opposite[best].price
                     trade_data[trade_count].quantity = fill_qty
 
-                    if side == 0:
+            if side == 0:
+                        trade_data[trade_count].buy_order_id = incoming.order_id
+                        trade_data[trade_count].sell_order_id = opposite[best].order_id
+                    else:
+                        trade_data[trade_count].buy_order_id = opposite[best].order_id
+                        trade_data[trade_count].sell_order_id = incoming.order_id
+
+                    trade_count += 1
+                    incoming.quantity -= fill_qty
+                    opposite[best].quantity -= fill_qty
+
+                    if opposite[best].quantity == 0:
+                        for i in range(best, rest_count - 1):
+                            opposite[i] = opposite[i + 1]
+                        rest_count -= 1
+
+            # Stop timing immediately after native matching.
+            end_ns = perf_counter_ns()
+            self._last_match_duration_ns = end_ns - start_ns
+
+            # Python-side book updates and result conversion follow.
+
+            if side == 0:
+                        if incoming.price < opposite[best].price:
+                            break
+                    else:
+                        if incoming.price > opposite[best].price:
+                            break
+
+                    fill_qty = incoming.quantity
+                    if opposite[best].quantity < fill_qty:
+                        fill_qty = opposite[best].quantity
+
+                    trade_data[trade_count].price = opposite[best].price
+                    trade_data[trade_count].quantity = fill_qty
+
+            if side == 0:
                         trade_data[trade_count].buy_order_id = incoming.order_id
                         trade_data[trade_count].sell_order_id = opposite[best].order_id
                     else:
@@ -250,6 +294,8 @@ cdef class CythonMatchingCore:
 
     cpdef int resting_order_count(self):
         return <int>(self.bid_count + self.ask_count)
+        cpdef long long get_last_match_duration_ns(self):
+        return self._last_match_duration_ns
 
     cpdef tuple book_snapshot(self):
         cdef list bids_snapshot = []
