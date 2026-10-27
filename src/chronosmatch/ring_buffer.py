@@ -1,4 +1,4 @@
-
+﻿
 import mmap
 import struct
 from contextlib import nullcontext
@@ -198,6 +198,92 @@ class MmapRingBuffer:
 
             HEADER.pack_into(self._map, 0, head + 1, tail)
             return order
+
+    def push_many(self, orders) -> int:
+        """Push as many orders as fit, using one lock acquisition."""
+        self._ensure_open()
+        batch = list(orders)
+
+        # Validate orders before writing any records.
+        for order in batch:
+            order.validate()
+
+        if not batch:
+            return 0
+
+        with self._guard():
+            head, tail = self._positions()
+            available = self.capacity - (tail - head)
+            count = min(len(batch), available)
+
+            for order in batch[:count]:
+                offset = (
+                    HEADER.size
+                    + (tail % self.capacity) * ORDER_RECORD.size
+                )
+
+                ORDER_RECORD.pack_into(
+                    self._map,
+                    offset,
+                    order.order_id,
+                    int(order.side),
+                    order.price,
+                    order.quantity,
+                    order.timestamp,
+                )
+                tail += 1
+
+            # Publish all written records together.
+            HEADER.pack_into(self._map, 0, head, tail)
+            return count
+
+    def pop_many(self, max_items: int) -> list[Order]:
+        """Pop up to max_items orders, using one lock acquisition."""
+        self._ensure_open()
+
+        if max_items <= 0:
+            raise ValueError("max_items must be positive")
+
+        with self._guard():
+            head, tail = self._positions()
+            count = min(max_items, tail - head)
+            orders = []
+
+            for _ in range(count):
+                offset = (
+                    HEADER.size
+                    + (head % self.capacity) * ORDER_RECORD.size
+                )
+
+                (
+                    order_id,
+                    side_value,
+                    price,
+                    quantity,
+                    timestamp,
+                ) = ORDER_RECORD.unpack_from(self._map, offset)
+
+                try:
+                    side = Side(side_value)
+                except ValueError as exc:
+                    raise ValueError(
+                        f"Invalid side value in buffer: {side_value}"
+                    ) from exc
+
+                order = Order(
+                    order_id=order_id,
+                    side=side,
+                    price=price,
+                    quantity=quantity,
+                    timestamp=timestamp,
+                )
+                order.validate()
+                orders.append(order)
+                head += 1
+
+            # Publish all consumed records together.
+            HEADER.pack_into(self._map, 0, head, tail)
+            return orders
 
     def close(self):
         if not self._closed:
