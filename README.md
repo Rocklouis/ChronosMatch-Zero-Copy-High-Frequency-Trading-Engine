@@ -95,7 +95,7 @@ Run the test suite:
 python -m pytest -q
 ```
 
-The latest recorded test run after the reusable trade-buffer optimization passed all 30 tests.
+The latest confirmed complete test run passed all 31 tests, including the mmap IPC and Cython matching integration test.
 
 ## Benchmark Results
 
@@ -176,6 +176,32 @@ Recorded local cross-process benchmark:
 The mmap test used a ring-buffer capacity of 4,096 and batches of 256 orders. Data-integrity checks passed.
 
 These measurements describe the tested implementation and environment; they are not universal performance comparisons.
+### 5. Batch IPC and Cython Matching Benchmark
+
+This benchmark transfers 10,000 orders between separate Python processes and processes them using the Cython matching engine.
+
+Original single-order IPC measurement:
+
+| Mode | Elapsed time | Throughput |
+|---|---:|---:|
+| Single-order operations | 21.695360 s | 461 orders/s |
+
+Batch IPC measurements using a batch size of 512:
+
+| Trial | Elapsed time | Throughput |
+|---|---:|---:|
+| 1 | 1.385881 s | 7,216 orders/s |
+| 2 | 1.197580 s | 8,350 orders/s |
+| 3 | 1.356586 s | 7,371 orders/s |
+| Average | 1.313 s | 7,646 orders/s |
+
+Measured throughput improvement over the original single-order benchmark: approximately 16.6x.
+
+Run:
+
+```powershell
+$env:PYTHONPATH = "$PWD\src"
+python benchmark_ipc_cython.py
 
 ## Current Limitations
 
@@ -197,6 +223,6 @@ These measurements describe the tested implementation and environment; they are 
 
 ## Project Status
 
-**Completed development milestones:** Order validation, mmap ring buffer, producer-consumer tests, 100,000-order pipeline benchmark, one-million-order IPC audit, Cython matching engine, reusable trade buffer, matching correctness checks, and per-order latency benchmarking.
+**Completed development milestones:** Order validation, mmap ring buffer, batch ring-buffer operations, producer-consumer tests, 100,000-order pipeline benchmark, one-million-order IPC audit, Cython matching engine, reusable trade buffer, matching correctness checks, mmap IPC and Cython integration, per-order latency benchmarking, and batch IPC benchmark optimization.
 
 ChronosMatch is an educational prototype under active development. Performance claims are reported as measured local results and should not be interpreted as guarantees for production trading systems.
