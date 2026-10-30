@@ -2,29 +2,37 @@
 
 ## Project Overview
 
-ChronosMatch is a low-latency trading-engine prototype exploring memory-mapped communication, order validation, asynchronous market-data generation, and producer-consumer pipelines using Python.
+ChronosMatch is an educational low-latency trading-engine prototype exploring memory-mapped communication, Cython-based order matching, and performance measurement.
 
-The project investigates how a fixed-layout binary buffer can reduce the overhead associated with passing structured order data between components.
+The project investigates how shared-memory techniques can reduce serialization overhead and how compiled Cython code can improve matching-engine performance compared with a pure Python implementation.
 
 **Domain:** FinTech and Low-Latency Systems
 
 ## Current Features
 
 - **Order model:** Represents buy and sell orders with IDs, prices, quantities, and timestamps.
-- **Order validation:** Rejects negative order IDs, invalid sides, non-positive prices, and non-positive quantities.
+- **Order validation:** Rejects invalid order IDs, sides, prices, and quantities.
 - **Memory-mapped ring buffer:** Implements fixed-capacity FIFO storage using `mmap` and `struct`.
+- **Batch operations:** Supports pushing multiple orders with fewer lock acquisitions.
 - **Market firehose:** Generates simulated orders asynchronously.
-- **Producer-consumer pipeline:** Tests order generation, consumption, and order integrity.
-- **Benchmark script:** Measures throughput across three runs of 100,000 orders.
+- **Producer-consumer pipeline:** Tests order generation, consumption, and integrity.
+- **Cross-process IPC audit:** Tests the transfer of one million orders between separate Python processes using memory-mapped communication.
+- **Python matching engine:** Implements limit-order matching with price-time priority.
+- **Cython matching engine:** Uses C structures and typed variables to reduce Python overhead in the matching path.
+- **Reusable trade buffer:** Reduces repeated memory allocation in the Cython matching engine.
+- **Latency benchmark:** Measures per-order latency percentiles (p50, p95, p99) and throughput.
+- **Pipeline benchmark:** Measures throughput for 100,000 orders.
 
 ## Technology Stack
 
 - Python
+- Cython
+- C
 - `asyncio`
 - `mmap`
 - `struct`
-- `unittest`
-- Cython — planned for the matching-engine phase
+- `pytest`
+- `curses` (dashboard development)
 
 ## Project Structure
 
@@ -34,64 +42,66 @@ chronosmatch/
 │   └── chronosmatch/
 │       ├── order.py
 │       ├── ring_buffer.py
-│       └── firehose.py
+│       └── matching_core.pyx
 ├── tests/
-├── test_order.py
-├── test_invalid_orders.py
-├── test_ring_buffer.py
-├── test_firehose.py
-├── test_pipeline.py
-├── test_live_pipeline.py
-├── test_serialization.py
+├── matching_engine.py
 ├── benchmark_pipeline.py
+├── benchmark_matching.py
+├── benchmark_latency.py
+├── setup_matching_core.py
+├── dashboard.py
 ├── README.md
 └── .gitignore
 ```
 
 ## Setup
 
-Open PowerShell in the project directory and activate the existing virtual environment:
+Open PowerShell in the project directory.
+
+Activate the existing virtual environment:
 
 ```powershell
 ..\.venv\Scripts\Activate.ps1
 ```
 
-If the environment has not been created, create it from the parent directory:
+Install the required packages if needed:
 
 ```powershell
-cd ..
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-cd chronosmatch
+python -m pip install --upgrade pip
+python -m pip install cython setuptools pytest
 ```
 
-## Running the Tests
+## Building the Cython Engine
 
-Run the tests from the project root:
+From the project root, run:
 
 ```powershell
-python test_order.py
-python test_invalid_orders.py
-python test_ring_buffer.py
-python test_firehose.py
-python test_pipeline.py
-python test_live_pipeline.py
+python setup_matching_core.py build_ext --inplace
 ```
 
-The reliability checkpoint completed five repeated ring-buffer test runs and five repeated live-pipeline test runs successfully.
+This compiles the Cython matching engine into a Python extension module.
 
-## Preliminary Benchmark Results
+## Running Tests
 
-The following results were measured during development on the local machine.
+Set the source directory on the Python path:
 
-### Live Pipeline
+```powershell
+$env:PYTHONPATH = "$PWD\src"
+```
 
-- Orders generated: 10,000
-- Orders consumed: 10,000
-- Elapsed time: approximately 0.1003 seconds
-- Observed throughput: approximately 99,729 orders/second
+Run the test suite:
 
-### 100,000-Order Benchmark
+```powershell
+python -m pytest -q
+```
+
+The latest recorded test run after the reusable trade-buffer optimization passed all 30 tests.
+
+## Benchmark Results
+
+The following are local development measurements. Results depend on hardware, operating-system scheduling, Python version, and benchmark implementation.
+
+### 1. 100,000-Order Pipeline Benchmark
 
 | Run | Orders | Elapsed time | Throughput |
 |---|---:|---:|---:|
@@ -100,33 +110,93 @@ The following results were measured during development on the local machine.
 | 3 | 100,000 | 0.4335 s | 230,692 orders/s |
 | Average | 100,000 per run | — | 218,774 orders/s |
 
-Run the benchmark with:
+Run:
 
 ```powershell
 python benchmark_pipeline.py
 ```
 
-These measurements are preliminary and depend on the local machine, Python runtime, operating-system scheduling, and benchmark implementation. They are not a controlled comparison with production trading systems.
+### 2. Python vs Cython Matching Benchmark
+
+Recorded local benchmark:
+
+| Metric | Python | Cython |
+|---|---:|---:|
+| Average execution time | 0.030662 s | 0.003478 s |
+| Throughput | 19,699 orders/s | 173,653 orders/s |
+
+Measured speed ratio: approximately 8.82x.
+
+Run:
+
+```powershell
+$env:PYTHONPATH = "$PWD\src"
+python benchmark_matching.py
+```
+
+The benchmark also checks that trade results and final order books match.
+
+### 3. Per-Order Latency Benchmark
+
+Recorded middle-trial measurements for 5,000 orders:
+
+| Metric | Python | Cython |
+|---|---:|---:|
+| p50 latency | 43.9 µs | 1.2 µs |
+| p95 latency | 104.8 µs | 1.6 µs |
+| p99 latency | 189.4 µs | 1.9 µs |
+| Maximum observed | 583.6 µs | 13.4 µs |
+| Throughput | 20,164 orders/s | 726,702 orders/s |
+
+Aggregate throughput across five trials:
+
+- Python: 19,516 orders/s
+- Cython: 634,708 orders/s
+- Measured throughput ratio: 32.52x
+
+Run:
+
+```powershell
+$env:PYTHONPATH = "$PWD\src"
+python benchmark_latency.py
+```
+
+Per-order measurements include Python-call and timer overhead. These results are local benchmark observations, not production HFT latency guarantees.
+
+### 4. One-Million-Order IPC Audit
+
+Recorded local cross-process benchmark:
+
+| Metric | mmap IPC | Pickle baseline |
+|---|---:|---:|
+| Orders transferred | 1,000,000 | 1,000,000 |
+| Elapsed time | 40.941 s | 51.895 s |
+| Throughput | 24,425 orders/s | 19,270 orders/s |
+
+The mmap test used a ring-buffer capacity of 4,096 and batches of 256 orders. Data-integrity checks passed.
+
+These measurements describe the tested implementation and environment; they are not universal performance comparisons.
 
 ## Current Limitations
 
-- The Cython-compiled matching engine and full limit order book are not yet implemented.
-- The current live pipeline is a Python producer-consumer test, not a verified cross-process trading pipeline.
-- The ring buffer has not yet been validated for safe concurrent access by independent processes.
-- Throughput measurements do not establish worst-case latency or tail-latency guarantees.
-- The project has not yet demonstrated the target of under 50 microseconds for end-to-end order processing.
+- The matching engine is a prototype, not a production exchange engine.
+- The mutable Cython matching engine is not thread-safe without external synchronization.
+- Local benchmark results do not establish worst-case latency guarantees.
+- End-to-end latency under 50 microseconds has not been established for the complete system.
+- Additional stress testing, process synchronization checks, and failure-recovery tests are needed before production use.
+- The terminal dashboard requires further integration and validation.
 
-## Next Development Phase
+## Next Development Goals
 
-1. Implement a limit order book and matching rules.
-2. Build and integrate a Cython-compiled matching engine.
-3. Define and validate a binary IPC message format.
-4. Test cross-process communication and synchronization.
-5. Add stronger correctness tests and controlled latency benchmarks.
-6. Develop the terminal monitoring dashboard.
+1. Integrate the IPC pipeline with the Cython matching engine.
+2. Verify order-book correctness under larger and more varied workloads.
+3. Improve C-level performance and reduce Python interactions in critical paths.
+4. Integrate the real-time terminal latency dashboard.
+5. Add stress, concurrency, and failure-recovery tests.
+6. Improve reproducibility of benchmarks and document hardware/software details.
 
 ## Project Status
 
-**Week 1 checkpoint:** Order validation, memory-mapped ring-buffer tests, asynchronous order generation, pipeline integration tests, preliminary throughput benchmarks, and repeated reliability checks completed.
+**Completed development milestones:** Order validation, mmap ring buffer, producer-consumer tests, 100,000-order pipeline benchmark, one-million-order IPC audit, Cython matching engine, reusable trade buffer, matching correctness checks, and per-order latency benchmarking.
 
-ChronosMatch is an educational prototype under active development. Performance claims will be updated only when supported by reproducible measurements.
+ChronosMatch is an educational prototype under active development. Performance claims are reported as measured local results and should not be interpreted as guarantees for production trading systems.
