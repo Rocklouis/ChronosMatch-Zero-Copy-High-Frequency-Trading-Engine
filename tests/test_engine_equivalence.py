@@ -95,6 +95,48 @@ class TestEngineEquivalence(unittest.TestCase):
 
         self.assertEqual(python_book, cython_book)
 
+    def test_equal_timestamp_uses_order_id_priority(self):
+        engine = CythonMatchingCore()
 
+        engine.add_order(20, 0, 100, 2, 5)
+        engine.add_order(10, 0, 100, 2, 5)
+
+        trades = engine.add_order(30, 1, 100, 3, 6)
+
+        self.assertEqual(
+            trades,
+            [(10, 30, 100, 2), (20, 30, 100, 1)]
+        )
+
+    def test_partial_fill_across_multiple_levels(self):
+        engine = CythonMatchingCore()
+
+        engine.add_order(1, 0, 105, 2, 1)
+        engine.add_order(2, 0, 100, 3, 2)
+
+        trades = engine.add_order(3, 1, 99, 4, 3)
+
+        self.assertEqual(
+            trades,
+            [(1, 3, 105, 2), (2, 3, 100, 2)]
+        )
+
+        self.assertEqual(
+            engine.book_snapshot(),
+            (((2, 100, 1, 2),), ())
+        )
+
+    def test_non_crossing_order_remains_in_book(self):
+        engine = CythonMatchingCore()
+
+        engine.add_order(1, 0, 100, 5, 1)
+        trades = engine.add_order(2, 1, 105, 3, 2)
+
+        self.assertEqual(trades, [])
+
+        self.assertEqual(
+            engine.book_snapshot(),
+            (((1, 100, 5, 1),), ((2, 105, 3, 2),))
+        )
 if __name__ == "__main__":
     unittest.main(verbosity=2)
