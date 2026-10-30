@@ -1,4 +1,4 @@
-﻿
+
 import mmap
 import struct
 from contextlib import nullcontext
