@@ -13,36 +13,52 @@ from chronosmatch.matching_core import CythonMatchingCore
 # Benchmark configuration
 TOTAL_ORDERS = 10_000
 CAPACITY = 1024
+BATCH_SIZE = 512
 TEST_TIMEOUT = 60
 
 
 def producer(path, total_orders, done, stop, errors):
-    """Generate orders and write them into the shared mmap ring buffer."""
+    """Generate orders and write them in batches to the mmap buffer."""
 
     try:
         with MmapRingBuffer.open_existing(path, CAPACITY) as buffer:
 
-            for i in range(total_orders):
+            for start in range(0, total_orders, BATCH_SIZE):
                 if stop.is_set():
                     break
 
-                side = Side.BUY if i % 2 == 0 else Side.SELL
+                batch = []
 
-                # BUY at 100 and SELL at 99 create crossing orders.
-                price = 100 if side == Side.BUY else 99
+                end = min(start + BATCH_SIZE, total_orders)
 
-                order = Order(
-                    order_id=i + 1,
-                    side=side,
-                    price=price,
-                    quantity=1,
-                    timestamp=i + 1,
-                )
+                for i in range(start, end):
+                    side = Side.BUY if i % 2 == 0 else Side.SELL
 
-                while not buffer.push(order):
+                    # Crossing orders generate immediate trades.
+                    price = 100 if side == Side.BUY else 99
+
+                    batch.append(
+                        Order(
+                            order_id=i + 1,
+                            side=side,
+                            price=price,
+                            quantity=1,
+                            timestamp=i + 1,
+                        )
+                    )
+
+                # push_many may accept only part of a batch.
+                offset = 0
+
+                while offset < len(batch):
                     if stop.is_set():
                         break
-                    time.sleep(0.0001)
+
+                    written = buffer.push_many(batch[offset:])
+                    offset += written
+
+                    if written == 0:
+                        time.sleep(0.0001)
 
                 if stop.is_set():
                     break
@@ -56,7 +72,7 @@ def producer(path, total_orders, done, stop, errors):
 
 
 def consumer(path, total_orders, done, stop, results, errors):
-    """Read mmap orders and process them using the Cython engine."""
+    """Read batches and process orders using the Cython matching engine."""
 
     try:
         engine = CythonMatchingCore()
@@ -66,14 +82,12 @@ def consumer(path, total_orders, done, stop, results, errors):
 
         with MmapRingBuffer.open_existing(path, CAPACITY) as buffer:
 
-            # Process exactly the number of orders expected.
             while processed < total_orders:
 
-                order = buffer.pop()
+                batch = buffer.pop_many(BATCH_SIZE)
 
-                if order is None:
+                if not batch:
 
-                    # Producer has finished, but some orders are missing.
                     if done.is_set():
                         raise RuntimeError(
                             f"Producer finished after only "
@@ -83,16 +97,18 @@ def consumer(path, total_orders, done, stop, results, errors):
                     time.sleep(0.0001)
                     continue
 
-                trades = engine.add_order(
-                    order.order_id,
-                    int(order.side),
-                    order.price,
-                    order.quantity,
-                    order.timestamp,
-                )
+                for order in batch:
 
-                processed += 1
-                trade_count += len(trades)
+                    trades = engine.add_order(
+                        order.order_id,
+                        int(order.side),
+                        order.price,
+                        order.quantity,
+                        order.timestamp,
+                    )
+
+                    processed += 1
+                    trade_count += len(trades)
 
         results.put({
             "processed": processed,
@@ -133,10 +149,9 @@ def main():
             args=(path, TOTAL_ORDERS, done, stop, errors),
         )
 
-        start_time = None
-
         try:
-            print("Starting IPC + Cython benchmark...")
+            print("Starting batched IPC + Cython benchmark...")
+            print(f"Batch size: {BATCH_SIZE}")
 
             consumer_process.start()
 
@@ -192,11 +207,12 @@ def main():
 
             throughput = processed / elapsed if elapsed > 0 else 0
 
-            print("\n========== IPC + CYTHON BENCHMARK ==========")
+            print("\n========== BATCHED IPC + CYTHON BENCHMARK ==========")
 
             print(f"Orders generated : {TOTAL_ORDERS:,}")
             print(f"Orders processed : {processed:,}")
             print(f"Trades generated : {trades:,}")
+            print(f"Batch size       : {BATCH_SIZE}")
             print(f"Elapsed time     : {elapsed:.6f} seconds")
             print(f"Throughput       : {throughput:,.0f} orders/second")
 
@@ -219,8 +235,11 @@ def main():
             if result["best_prices"] != (None, None):
                 raise AssertionError("Expected an empty order book")
 
+            if result["book"] != ((), ()):
+                raise AssertionError("Expected both sides of the book to be empty")
+
             print("\nCorrectness check: PASS")
-            print("IPC + Cython benchmark: PASS")
+            print("Batched IPC + Cython benchmark: PASS")
 
         finally:
             stop.set()
