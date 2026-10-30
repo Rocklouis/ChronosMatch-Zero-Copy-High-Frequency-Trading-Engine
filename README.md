@@ -87,6 +87,7 @@ Set the source directory on the Python path:
 
 ```powershell
 $env:PYTHONPATH = "$PWD\src"
+python benchmark_ipc_cython.py
 ```
 
 Run the test suite:
@@ -202,6 +203,7 @@ Run:
 ```powershell
 $env:PYTHONPATH = "$PWD\src"
 python benchmark_ipc_cython.py
+...
 
 ## Current Limitations
 
