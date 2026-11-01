@@ -255,12 +255,12 @@ cdef class CythonMatchingCore:
                 incoming.quantity -= fill_qty
                 opposite[best].quantity -= fill_qty
 
-                # Remove a fully filled resting order.
-                if opposite[best].quantity == 0:
-                    for i in range(best, rest_count - 1):
-                        opposite[i] = opposite[i + 1]
+                # Remove a fully filled resting order using swap-delete.
+if opposite[best].quantity == 0:
+    if best != rest_count - 1:
+        opposite[best] = opposite[rest_count - 1]
 
-                    rest_count -= 1
+    rest_count -= 1
 
         end_ns = perf_counter_ns()
         self._last_match_duration_ns = end_ns - start_ns
