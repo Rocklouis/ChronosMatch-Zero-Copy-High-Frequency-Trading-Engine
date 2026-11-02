@@ -1,0 +1,4 @@
+filelock>=3.0
+Cython
+setuptools
+pytest

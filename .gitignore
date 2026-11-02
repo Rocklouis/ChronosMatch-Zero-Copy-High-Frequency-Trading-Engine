@@ -1,15 +1,35 @@
 
+
+# Python virtual environments
 .venv/
+.venv311/
 venv/
+
+# Python cache and test files
 __pycache__/
 *.py[cod]
 .pytest_cache/
+
+# Build and distribution files
 build/
 dist/
 *.egg-info/
+
+# Database and log files
 *.db
 *.sqlite
 *.sqlite3
 *.log
+
+# Editor settings
 .vscode/
-      
+
+# Generated Cython C files
+cython_smoke.c
+src/chronosmatch/matching_core.c
+
+# Compiled Python extensions
+*.pyd
+
+# Backup files
+*.bak
