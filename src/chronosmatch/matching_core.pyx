@@ -55,6 +55,42 @@ cdef Py_ssize_t best_index(
     return best
 
 
+cdef inline bint has_higher_priority(
+    COrder a,
+    COrder b,
+    bint is_bid
+) noexcept nogil:
+    if a.price != b.price:
+        if is_bid:
+            return a.price > b.price
+        else:
+            return a.price < b.price
+
+    if a.timestamp != b.timestamp:
+        return a.timestamp < b.timestamp
+
+    return a.order_id < b.order_id
+
+
+cdef void insert_sorted(
+    COrder* orders,
+    Py_ssize_t* count,
+    COrder incoming,
+    bint is_bid
+) noexcept nogil:
+    cdef Py_ssize_t pos = 0
+    cdef Py_ssize_t i
+
+    while pos < count[0]:
+        if has_higher_priority(incoming, orders[pos], is_bid):
+            break
+        pos += 1
+
+    for i in range(count[0], pos, -1):
+        orders[i] = orders[i - 1]
+
+    orders[pos] = incoming
+    count[0] += 1
 cdef class CythonMatchingCore:
     cdef COrder* bids
     cdef COrder* asks
@@ -255,12 +291,12 @@ cdef class CythonMatchingCore:
                 incoming.quantity -= fill_qty
                 opposite[best].quantity -= fill_qty
 
-                # Remove a fully filled resting order using swap-delete.
-if opposite[best].quantity == 0:
-    if best != rest_count - 1:
-        opposite[best] = opposite[rest_count - 1]
+                               # Remove a fully filled resting order using swap-delete.
+                if opposite[best].quantity == 0:
+                    if best != rest_count - 1:
+                        opposite[best] = opposite[rest_count - 1]
 
-    rest_count -= 1
+                    rest_count -= 1
 
         end_ns = perf_counter_ns()
         self._last_match_duration_ns = end_ns - start_ns
