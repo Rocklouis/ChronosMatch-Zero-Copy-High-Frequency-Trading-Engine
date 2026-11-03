@@ -82,7 +82,7 @@ cdef void insert_sorted(
     cdef Py_ssize_t i
 
     while pos < count[0]:
-        if has_higher_priority(incoming, orders[pos], is_bid):
+        if has_higher_priority(orders[pos], incoming, is_bid):
             break
         pos += 1
 
@@ -261,7 +261,7 @@ cdef class CythonMatchingCore:
 
         with nogil:
             while incoming.quantity > 0 and rest_count > 0:
-                best = best_index(opposite, rest_count, side == 1)
+                best = rest_count - 1
 
                 # BUY crosses the best ask if its price is high enough.
                 if side == 0:
@@ -291,29 +291,24 @@ cdef class CythonMatchingCore:
                 incoming.quantity -= fill_qty
                 opposite[best].quantity -= fill_qty
 
-                               # Remove a fully filled resting order using swap-delete.
+                                              # Remove the fully filled best order.
                 if opposite[best].quantity == 0:
-                    if best != rest_count - 1:
-                        opposite[best] = opposite[rest_count - 1]
-
                     rest_count -= 1
 
         end_ns = perf_counter_ns()
         self._last_match_duration_ns = end_ns - start_ns
 
         # Update the appropriate book after the native loop.
-        if side == 0:
-            self.ask_count = rest_count
+if side == 0:
+    self.ask_count = rest_count
 
-            if incoming.quantity > 0:
-                self.bids[self.bid_count] = incoming
-                self.bid_count += 1
-        else:
-            self.bid_count = rest_count
+    if incoming.quantity > 0:
+        insert_sorted(self.bids, &self.bid_count, incoming, True)
+else:
+    self.bid_count = rest_count
 
-            if incoming.quantity > 0:
-                self.asks[self.ask_count] = incoming
-                self.ask_count += 1
+    if incoming.quantity > 0:
+        insert_sorted(self.asks, &self.ask_count, incoming, False)
 
         # Convert native trade records into Python tuples outside nogil.
         for i in range(trade_count):
@@ -327,20 +322,16 @@ cdef class CythonMatchingCore:
         return trades
 
     cpdef tuple best_prices(self):
-        cdef object bid_price = None
-        cdef object ask_price = None
-        cdef Py_ssize_t idx
+    cdef object bid_price = None
+    cdef object ask_price = None
 
-        if self.bid_count > 0:
-            idx = best_index(self.bids, self.bid_count, True)
-            bid_price = self.bids[idx].price
+    if self.bid_count > 0:
+        bid_price = self.bids[self.bid_count - 1].price
 
-        if self.ask_count > 0:
-            idx = best_index(self.asks, self.ask_count, False)
-            ask_price = self.asks[idx].price
+    if self.ask_count > 0:
+        ask_price = self.asks[self.ask_count - 1].price
 
-        return bid_price, ask_price
-
+    return bid_price, ask_price
     cpdef int resting_order_count(self):
         return <int>(self.bid_count + self.ask_count)
 
