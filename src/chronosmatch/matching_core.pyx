@@ -291,7 +291,7 @@ cdef class CythonMatchingCore:
                 incoming.quantity -= fill_qty
                 opposite[best].quantity -= fill_qty
 
-                                              # Remove the fully filled best order.
+                                                              # Remove the fully filled best order.
                 if opposite[best].quantity == 0:
                     rest_count -= 1
 
@@ -299,16 +299,16 @@ cdef class CythonMatchingCore:
         self._last_match_duration_ns = end_ns - start_ns
 
         # Update the appropriate book after the native loop.
-if side == 0:
-    self.ask_count = rest_count
+        if side == 0:
+            self.ask_count = rest_count
 
-    if incoming.quantity > 0:
-        insert_sorted(self.bids, &self.bid_count, incoming, True)
-else:
-    self.bid_count = rest_count
+            if incoming.quantity > 0:
+                insert_sorted(self.bids, &self.bid_count, incoming, True)
+        else:
+            self.bid_count = rest_count
 
-    if incoming.quantity > 0:
-        insert_sorted(self.asks, &self.ask_count, incoming, False)
+            if incoming.quantity > 0:
+                insert_sorted(self.asks, &self.ask_count, incoming, False)
 
         # Convert native trade records into Python tuples outside nogil.
         for i in range(trade_count):
@@ -322,21 +322,16 @@ else:
         return trades
 
     cpdef tuple best_prices(self):
-    cdef object bid_price = None
-    cdef object ask_price = None
+        cdef object bid_price = None
+        cdef object ask_price = None
 
-    if self.bid_count > 0:
-        bid_price = self.bids[self.bid_count - 1].price
+        if self.bid_count > 0:
+            bid_price = self.bids[self.bid_count - 1].price
 
-    if self.ask_count > 0:
-        ask_price = self.asks[self.ask_count - 1].price
+        if self.ask_count > 0:
+            ask_price = self.asks[self.ask_count - 1].price
 
-    return bid_price, ask_price
-    cpdef int resting_order_count(self):
-        return <int>(self.bid_count + self.ask_count)
-
-    cpdef long long get_last_match_duration_ns(self):
-        return self._last_match_duration_ns
+        return bid_price, ask_price
 
     cpdef tuple book_snapshot(self):
         cdef list bids_snapshot = []
@@ -360,3 +355,6 @@ else:
             ))
 
         return tuple(bids_snapshot), tuple(asks_snapshot)
+
+    cpdef Py_ssize_t resting_order_count(self):
+        return self.bid_count + self.ask_count
