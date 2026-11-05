@@ -20,8 +20,8 @@ The project investigates how shared-memory techniques can reduce serialization o
 - **Python matching engine:** Implements limit-order matching with price-time priority.
 - **Cython matching engine:** Uses C structures and typed variables to reduce Python overhead in the matching path.
 - **Reusable trade buffer:** Reduces repeated memory allocation in the Cython matching engine.
-- **Latency benchmark:** Measures per-order latency percentiles (p50, p95, p99) and throughput.
-- **Pipeline benchmark:** Measures throughput for 100,000 orders.
+- **Latency benchmarking:** Measures per-order latency percentiles and throughput.
+- **Pipeline benchmarking:** Measures throughput for 100,000 orders.
 
 ## Technology Stack
 
@@ -44,7 +44,6 @@ chronosmatch/
 │       ├── ring_buffer.py
 │       └── matching_core.pyx
 ├── tests/
-├── matching_engine.py
 ├── benchmark_pipeline.py
 ├── benchmark_matching.py
 ├── benchmark_latency.py
@@ -87,7 +86,6 @@ Set the source directory on the Python path:
 
 ```powershell
 $env:PYTHONPATH = "$PWD\src"
-python benchmark_ipc_cython.py
 ```
 
 Run the test suite:
@@ -96,7 +94,11 @@ Run the test suite:
 python -m pytest -q
 ```
 
-The latest confirmed complete test run passed all 31 tests, including the mmap IPC and Cython matching integration test.
+**Latest confirmed regression test result:**
+
+```text
+34 passed in 2.28s
+```
 
 ## Benchmark Results
 
@@ -119,14 +121,16 @@ python benchmark_pipeline.py
 
 ### 2. Python vs Cython Matching Benchmark
 
-Recorded local benchmark:
+Latest recorded benchmark:
 
 | Metric | Python | Cython |
 |---|---:|---:|
-| Average execution time | 0.030662 s | 0.003478 s |
-| Throughput | 19,699 orders/s | 173,653 orders/s |
+| Average execution time | 0.011430 s | 0.000743 s |
+| Throughput | 52,843 orders/s | 812,410 orders/s |
 
-Measured speed ratio: approximately 8.82x.
+**Measured speed ratio: approximately 15.37×.**
+
+The benchmark processed 604 orders per run and produced 403 trades. The final trade results and order books matched between the Python and Cython implementations.
 
 Run:
 
@@ -135,11 +139,11 @@ $env:PYTHONPATH = "$PWD\src"
 python benchmark_matching.py
 ```
 
-The benchmark also checks that trade results and final order books match.
+These figures are local measurements, not production HFT latency guarantees.
 
 ### 3. Per-Order Latency Benchmark
 
-Recorded middle-trial measurements for 5,000 orders:
+Previously recorded middle-trial measurements for 5,000 orders:
 
 | Metric | Python | Cython |
 |---|---:|---:|
@@ -149,11 +153,11 @@ Recorded middle-trial measurements for 5,000 orders:
 | Maximum observed | 583.6 µs | 13.4 µs |
 | Throughput | 20,164 orders/s | 726,702 orders/s |
 
-Aggregate throughput across five trials:
+Previously recorded aggregate throughput across five trials:
 
 - Python: 19,516 orders/s
 - Cython: 634,708 orders/s
-- Measured throughput ratio: 32.52x
+- Measured throughput ratio: 32.52×
 
 Run:
 
@@ -166,20 +170,30 @@ Per-order measurements include Python-call and timer overhead. These results are
 
 ### 4. One-Million-Order IPC Audit
 
-Recorded local cross-process benchmark:
+Latest verified local cross-process benchmark:
 
 | Metric | mmap IPC | Pickle baseline |
 |---|---:|---:|
 | Orders transferred | 1,000,000 | 1,000,000 |
-| Elapsed time | 40.941 s | 51.895 s |
-| Throughput | 24,425 orders/s | 19,270 orders/s |
+| Elapsed time | 43.976 s | 63.063 s |
+| Throughput | 22,740 orders/s | 15,857 orders/s |
+| Data integrity | PASS | PASS |
 
-The mmap test used a ring-buffer capacity of 4,096 and batches of 256 orders. Data-integrity checks passed.
+**Measured elapsed-time ratio: 1.43× in favour of mmap.**
 
-These measurements describe the tested implementation and environment; they are not universal performance comparisons.
+The mmap test used:
+
+- Ring-buffer capacity: 4,096
+- Batch size: 256
+- Separate producer and consumer processes
+
+Both implementations passed record-count, ordering, and data-integrity checks.
+
+The measurements include process startup and IPC overhead. They are not pure serialization or memory-copy timings.
+
 ### 5. Batch IPC and Cython Matching Benchmark
 
-This benchmark transfers 10,000 orders between separate Python processes and processes them using the Cython matching engine.
+Previously recorded benchmark transferring 10,000 orders between separate Python processes and processing them using the Cython matching engine.
 
 Original single-order IPC measurement:
 
@@ -196,14 +210,14 @@ Batch IPC measurements using a batch size of 512:
 | 3 | 1.356586 s | 7,371 orders/s |
 | Average | 1.313 s | 7,646 orders/s |
 
-Measured throughput improvement over the original single-order benchmark: approximately 16.6x.
+Measured throughput improvement over the original single-order benchmark: approximately 16.6×.
 
 Run:
 
 ```powershell
 $env:PYTHONPATH = "$PWD\src"
 python benchmark_ipc_cython.py
-...
+```
 
 ## Current Limitations
 
@@ -212,7 +226,7 @@ python benchmark_ipc_cython.py
 - Local benchmark results do not establish worst-case latency guarantees.
 - End-to-end latency under 50 microseconds has not been established for the complete system.
 - Additional stress testing, process synchronization checks, and failure-recovery tests are needed before production use.
-- The terminal dashboard requires further integration and validation.
+- The terminal dashboard still requires integration and validation.
 
 ## Next Development Goals
 
@@ -225,6 +239,19 @@ python benchmark_ipc_cython.py
 
 ## Project Status
 
-**Completed development milestones:** Order validation, mmap ring buffer, batch ring-buffer operations, producer-consumer tests, 100,000-order pipeline benchmark, one-million-order IPC audit, Cython matching engine, reusable trade buffer, matching correctness checks, mmap IPC and Cython integration, per-order latency benchmarking, and batch IPC benchmark optimization.
+**Verified development milestones:**
+
+- Order validation
+- mmap ring buffer
+- Batch ring-buffer operations
+- Producer-consumer tests
+- 100,000-order pipeline benchmark
+- One-million-order IPC audit
+- Cython matching engine
+- Reusable trade buffer
+- Matching correctness checks
+- IPC and Cython integration tests
+- Per-order latency benchmarking
+- Batch IPC benchmark
 
 ChronosMatch is an educational prototype under active development. Performance claims are reported as measured local results and should not be interpreted as guarantees for production trading systems.
