@@ -1,6 +1,6 @@
-# ChronosMatch — Zero-Copy High-Frequency Trading Engine
+ChronosMatch — Zero-Copy High-Frequency Trading Engine
 
-## Project Overview
+Project Overview
 
 ChronosMatch is an educational low-latency trading-engine prototype exploring memory-mapped communication, Cython-based order matching, and performance measurement.
 
@@ -8,7 +8,7 @@ The project investigates how shared-memory techniques can reduce serialization o
 
 **Domain:** FinTech and Low-Latency Systems
 
-## Current Features
+Current Features
 
 - **Order model:** Represents buy and sell orders with IDs, prices, quantities, and timestamps.
 - **Order validation:** Rejects invalid order IDs, sides, prices, and quantities.
@@ -23,7 +23,7 @@ The project investigates how shared-memory techniques can reduce serialization o
 - **Latency benchmarking:** Measures per-order latency percentiles and throughput.
 - **Pipeline benchmarking:** Measures throughput for 100,000 orders.
 
-## Technology Stack
+Technology Stack
 
 - Python
 - Cython
@@ -34,7 +34,7 @@ The project investigates how shared-memory techniques can reduce serialization o
 - `pytest`
 - `curses` (dashboard development)
 
-## Project Structure
+Project Structure
 
 ```text
 chronosmatch/
@@ -53,7 +53,7 @@ chronosmatch/
 └── .gitignore
 ```
 
-## Setup
+Setup
 
 Open PowerShell in the project directory.
 
@@ -70,7 +70,7 @@ python -m pip install --upgrade pip
 python -m pip install cython setuptools pytest
 ```
 
-## Building the Cython Engine
+Building the Cython Engine
 
 From the project root, run:
 
@@ -80,7 +80,7 @@ python setup_matching_core.py build_ext --inplace
 
 This compiles the Cython matching engine into a Python extension module.
 
-## Running Tests
+Running Tests
 
 Set the source directory on the Python path:
 
@@ -100,11 +100,11 @@ python -m pytest -q
 34 passed in 2.28s
 ```
 
-## Benchmark Results
+Benchmark Results
 
 The following are local development measurements. Results depend on hardware, operating-system scheduling, Python version, and benchmark implementation.
 
-### 1. 100,000-Order Pipeline Benchmark
+1. 100,000-Order Pipeline Benchmark
 
 | Run | Orders | Elapsed time | Throughput |
 |---|---:|---:|---:|
@@ -119,7 +119,7 @@ Run:
 python benchmark_pipeline.py
 ```
 
-### 2. Python vs Cython Matching Benchmark
+2. Python vs Cython Matching Benchmark
 
 Latest recorded benchmark:
 
@@ -141,23 +141,23 @@ python benchmark_matching.py
 
 These figures are local measurements, not production HFT latency guarantees.
 
-### 3. Per-Order Latency Benchmark
+3. Per-Order Latency Benchmark
 
-Previously recorded middle-trial measurements for 5,000 orders:
+Latest verified middle-trial measurements for 5,000 orders:
 
 | Metric | Python | Cython |
 |---|---:|---:|
-| p50 latency | 43.9 µs | 1.2 µs |
-| p95 latency | 104.8 µs | 1.6 µs |
-| p99 latency | 189.4 µs | 1.9 µs |
-| Maximum observed | 583.6 µs | 13.4 µs |
-| Throughput | 20,164 orders/s | 726,702 orders/s |
+| p50 latency | 40.900 µs | 0.900 µs |
+| p95 latency | 87.900 µs | 1.400 µs |
+| p99 latency | 131.000 µs | 2.200 µs |
+| Maximum observed | 997.600 µs | 102.000 µs |
+| Throughput | 22,884 orders/s | 827,691 orders/s |
 
-Previously recorded aggregate throughput across five trials:
+Latest verified aggregate throughput across five trials:
 
-- Python: 19,516 orders/s
-- Cython: 634,708 orders/s
-- Measured throughput ratio: 32.52×
+- Python: 22,524 orders/s
+- Cython: 839,439 orders/s
+- Measured throughput ratio: 37.27×
 
 Run:
 
@@ -166,9 +166,10 @@ $env:PYTHONPATH = "$PWD\src"
 python benchmark_latency.py
 ```
 
-Per-order measurements include Python-call and timer overhead. These results are local benchmark observations, not production HFT latency guarantees.
+Correctness verification: PASS. Python and Cython trade results and final order books match.
 
-### 4. One-Million-Order IPC Audit
+Per-order measurements include Python-call and timer overhead. These results are local benchmark observations, not production HFT latency guarantees.
+4. One-Million-Order IPC Audit
 
 Latest verified local cross-process benchmark:
 
@@ -191,7 +192,7 @@ Both implementations passed record-count, ordering, and data-integrity checks.
 
 The measurements include process startup and IPC overhead. They are not pure serialization or memory-copy timings.
 
-### 5. Batch IPC and Cython Matching Benchmark
+5. Batch IPC and Cython Matching Benchmark
 
 Previously recorded benchmark transferring 10,000 orders between separate Python processes and processing them using the Cython matching engine.
 
@@ -219,7 +220,7 @@ $env:PYTHONPATH = "$PWD\src"
 python benchmark_ipc_cython.py
 ```
 
-## Current Limitations
+Current Limitations
 
 - The matching engine is a prototype, not a production exchange engine.
 - The mutable Cython matching engine is not thread-safe without external synchronization.
@@ -228,7 +229,7 @@ python benchmark_ipc_cython.py
 - Additional stress testing, process synchronization checks, and failure-recovery tests are needed before production use.
 - The terminal dashboard still requires integration and validation.
 
-## Next Development Goals
+Next Development Goals
 
 1. Integrate the IPC pipeline with the Cython matching engine.
 2. Verify order-book correctness under larger and more varied workloads.
@@ -237,7 +238,7 @@ python benchmark_ipc_cython.py
 5. Add stress, concurrency, and failure-recovery tests.
 6. Improve reproducibility of benchmarks and document hardware/software details.
 
-## Project Status
+Project Status
 
 **Verified development milestones:**
 

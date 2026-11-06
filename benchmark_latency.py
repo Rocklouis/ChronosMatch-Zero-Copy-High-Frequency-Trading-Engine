@@ -95,7 +95,10 @@ def run_cython(orders):
         "latencies_ns": latencies_ns,
         "elapsed_ns": elapsed_ns,
         "trades": all_trades,
-        "book": engine.book_snapshot(),
+        "book": tuple(
+            tuple(sorted(side))
+            for side in engine.book_snapshot()
+        ),
     }
 
 
@@ -131,10 +134,14 @@ def report(name, samples):
     print(f"  Orders:     {count:,}")
     print(f"  Total time: {elapsed / 1_000_000:.3f} ms")
     print(f"  Throughput: {count / (elapsed / 1_000_000_000):,.0f} orders/sec")
-    print(f"  p50:        {percentile(latencies, 50):,} ns")
-    print(f"  p95:        {percentile(latencies, 95):,} ns")
-    print(f"  p99:        {percentile(latencies, 99):,} ns")
-    print(f"  Maximum:    {max(latencies):,} ns")
+    print(f"  p50:        {percentile(latencies, 50):,} ns "
+          f"({percentile(latencies, 50) / 1000:.3f} µs)")
+    print(f"  p95:        {percentile(latencies, 95):,} ns "
+          f"({percentile(latencies, 95) / 1000:.3f} µs)")
+    print(f"  p99:        {percentile(latencies, 99):,} ns "
+          f"({percentile(latencies, 99) / 1000:.3f} µs)")
+    print(f"  Maximum:    {max(latencies):,} ns "
+          f"({max(latencies) / 1000:.3f} µs)")
 
 
 def main():
