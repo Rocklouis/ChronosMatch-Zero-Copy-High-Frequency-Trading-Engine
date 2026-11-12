@@ -358,3 +358,8 @@ cdef class CythonMatchingCore:
 
     cpdef Py_ssize_t resting_order_count(self):
         return self.bid_count + self.ask_count
+
+    @property
+    def last_match_duration_ns(self):
+        """Duration of the most recent native matching loop."""
+        return self._last_match_duration_ns
